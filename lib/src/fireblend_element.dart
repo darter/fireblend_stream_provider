@@ -4,6 +4,10 @@ import 'dart:math';
 import 'package:fireblend/fireblend.dart';
 import 'package:rxdart/rxdart.dart';
 
+/// None of the methods in these classes should be called by themselves.
+/// The idea behind these is to implement the abstract methods and then
+/// pass the instance of the class as an input to a [FireblendStreamProvider]
+
 class _EventType {
   static const String VALUE = "value";
   static const String CHILD_ADDED = "child_added";
@@ -101,19 +105,25 @@ abstract class FireblendStreamElement<T> extends FireblendElement<T> {
 
 abstract class FireblendElement<T> {
   List<FireblendQuery> _queries;
-  List<String> eventTypes;
+  List<String> _eventTypes;
   Map<String, T> _state;
   bool _closed;
   bool _ready;
 
   Map<String, Set<String>> _mapping;
+  Map<String, Set<String>> _sources;
   Map<String, StreamSubscription> _subscriptions;
 
-  FireblendElement(this._queries, this.eventTypes) {
+  FireblendElement(this._queries, this._eventTypes) {
+    if (_queries?.isEmpty ?? true)
+      throw Exception("At least one FireblendQuery must be provided.");
+    if (_eventTypes?.isEmpty ?? true)
+      throw Exception("At least one _EventType must be provided.");
     _state = Map();
     _closed = false;
     _ready = false;
     _mapping = Map();
+    _sources = Map();
     _subscriptions = Map();
   }
 
@@ -123,28 +133,28 @@ abstract class FireblendElement<T> {
     if (_ready) return;
     _ready = true;
     for (FireblendQuery query in _queries) {
-      for (String type in eventTypes) {
+      for (String type in _eventTypes) {
         switch (type) {
           case _EventType.VALUE:
             _subscribe(query.onValue.listen((FireblendEvent event) {
               if (!_closed && event.snapshot.value != null)
-                converterAsync(event.snapshot);
+                converterAsync(query.getPath(), event.snapshot);
               if (!_closed && event.snapshot.value == null)
-                _remover(event.snapshot.key);
+                _remover(query.getPath());
             }), _EventType.VALUE); break;
           case _EventType.CHILD_ADDED:
             _subscribe(query.onChildAdded.listen((FireblendEvent event) {
               if (!_closed && event.snapshot.value != null)
-                converterAsync(event.snapshot);
+                converterAsync(query.getPath(), event.snapshot);
             }), _EventType.CHILD_ADDED); break;
           case _EventType.CHILD_CHANGED:
             _subscribe(query.onChildChanged.listen((FireblendEvent event) {
               if (!_closed && event.snapshot.value != null)
-                converterAsync(event.snapshot);
+                converterAsync(query.getPath(), event.snapshot);
             }), _EventType.CHILD_CHANGED); break;
           case _EventType.CHILD_REMOVED:
             _subscribe(query.onChildRemoved.listen((FireblendEvent event) {
-              if (!_closed) _remover(event.snapshot.key);
+              if (!_closed) _remover(query.getPath());
             }), _EventType.CHILD_REMOVED); break;
           default:
             throw Exception("Unsupported event type.");
@@ -153,6 +163,10 @@ abstract class FireblendElement<T> {
     }
   }
 
+  /// This method must only be called from within [converterAsync].
+  /// It inserts a new [entry] into the [state].
+  /// The [source] must be the one that came as the
+  /// parameter of the aforementioned [converterAsync].
   bool insert(String source, MapEntry<String, T> entry) {
     if (_closed) return false;
     bool contained = _state.containsKey(entry.key);
@@ -160,11 +174,19 @@ abstract class FireblendElement<T> {
     if (_mapping[source] == null)
       _mapping[source] = Set();
     _mapping[source].add(entry.key);
+    if (_sources[entry.key] == null)
+      _sources[entry.key] = Set();
+    _sources[entry.key].add(source);
     if (contained) _onModified(entry);
     else _onAdded(entry);
     return true;
   }
 
+  /// This method must only be called from within [converterAsync].
+  /// It ties the [subscription] to the lifecycle of this class.
+  /// The [source] must be the one that came as the
+  /// parameter of the aforementioned [converterAsync].
+  /// The [key] uniquely identifies the [subscription].
   void subscribe(String source, StreamSubscription subscription, {String key}) {
     if (key == null)
       key = Random().nextDouble().toString();
@@ -191,7 +213,8 @@ abstract class FireblendElement<T> {
     }
   }
 
-  void converterAsync(FireblendDataSnapshot snapshot);
+  /// Update the [_state] by using the methods [insert] and [subscribe]
+  void converterAsync(String source, FireblendDataSnapshot snapshot);
 
   void _remover(String source) {
     if (_mapping.containsKey(source)) {
@@ -201,9 +224,12 @@ abstract class FireblendElement<T> {
         dynamic result = _subscriptions.remove(key);
         // Delete related entries.
         if (result == null) {
-          T value = _state[key];
-          _state.remove(key);
-          _onRemoved(MapEntry(key, value));
+          _sources[key].remove(source);
+          if (_sources[key].isEmpty) {
+            T value = _state[key];
+            _state.remove(key);
+            _onRemoved(MapEntry(key, value));
+          }
         }
       } _mapping.remove(source);
     }
@@ -215,6 +241,8 @@ abstract class FireblendElement<T> {
 
   void _onRemoved(MapEntry<String, T> entry);
 
+  /// Cancels all of the [StreamSubscription] inside of [_subscriptions]
+  /// that were tied to class through the use of [subscribe].
   Future close() async {
     List<Future> futures = List();
     for (String key in _subscriptions.keys)

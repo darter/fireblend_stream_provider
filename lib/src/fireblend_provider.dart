@@ -191,13 +191,14 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T>{
   @override
   Future _clear() async {
     Map<String, Set<String>> sources = Map.from(_sources);
+    Map<String, T> filtered = Map.from(_filtered);
     _state.removeWhere((key, value) => sources[key]?.isNotEmpty ?? false);
     _filtered.removeWhere((key, value) => sources[key]?.isNotEmpty ?? false);
     _stateController.add(_filtered);
     _sources.clear();
     for (String key in sources.keys)
       if ((sources[key]?.isNotEmpty ?? false)
-          && _filtered.containsKey(key))
+          && filtered.containsKey(key))
         _removalController.add(key);
   }
 
