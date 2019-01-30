@@ -190,8 +190,7 @@ abstract class FireblendElement<T> {
   /// parameter of the aforementioned [converterAsync].
   /// The [key] uniquely identifies the [subscription].
   void subscribe(String source, StreamSubscription subscription, {String key}) {
-    if (key == null)
-      key = Random().nextDouble().toString();
+    if (key == null) key = source;
     if (key == _EventType.VALUE
         || key == _EventType.CHILD_ADDED
         || key == _EventType.CHILD_CHANGED
