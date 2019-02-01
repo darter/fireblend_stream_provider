@@ -244,6 +244,7 @@ class ValueStreamProvider<T> extends FireblendStreamProvider<T>{
     results = results.expand((e) => e).toList(); // Flatten results array.
     for (int i = 0; i < results.length; i++)
       accumulator = _combine(accumulator, results[i]);
+    accumulator = _combine(accumulator, _state);
     if (accumulator.isNotEmpty) return accumulator.entries
         .firstWhere((entry) => entry.value != null, orElse: () => null);
     else return null;
