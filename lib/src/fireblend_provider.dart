@@ -367,10 +367,6 @@ abstract class FireblendStreamProvider<T> {
   Future clear() async {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
-    await _clearAux();
-  }
-
-  Future _clearAux() async {
     List<Future> futures = List();
     for (String key in _subscriptions.keys)
       futures.add(_subscriptions[key].cancel());
@@ -384,10 +380,14 @@ abstract class FireblendStreamProvider<T> {
 
   Future _clear();
 
+  // In Dart 1.x, async functions immediately suspended execution.
+  // In Dart 2, instead of immediately suspending, async functions
+  // execute synchronously until the first await or return.
   Future close() async {
     if (!_closed) {
+      Future future = clear();
       _closed = true;
-      await _clearAux();
+      await future;
       await _close();
     }
   }
