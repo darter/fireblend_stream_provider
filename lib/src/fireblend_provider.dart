@@ -61,7 +61,7 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
 
   Stream<String> get removal =>  _removalController.stream;
 
-  Map<String, T> currentState() =>
+  Map<String, T> currentState() => _filter == null ? Map.from(_state) :
       Map.from(_state)..removeWhere((key, value) => !_filter(key, value));
 
   void insert(MapEntry<String, T> entry) {
