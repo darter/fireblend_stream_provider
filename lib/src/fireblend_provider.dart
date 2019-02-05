@@ -27,9 +27,9 @@ class ValueStream<T> {
   Observable<MapEntry<String, T>> get state => _provider.state;
 }
 
-class CollectionStreamProvider<T> extends FireblendStreamProvider<T>{
+class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
   Map<String, T> _state;
-  Map<String, T> _filtered;
+  Map<String, T> _inserted;
   bool Function(String, T) _filter;
   Map<String, Set<String>> _sources;
   BehaviorSubject<Map<String, T>> _stateController;
@@ -39,42 +39,44 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T>{
 
   CollectionStreamProvider() {
     _state = Map();
-    _filtered = Map();
+    _inserted = Map();
     _sources = Map();
     _stateController = BehaviorSubject<Map<String, T>>();
     _additionController = StreamController<MapEntry<String, T>>.broadcast();
     _modificationController = StreamController<MapEntry<String, T>>.broadcast();
     _removalController = StreamController<String>.broadcast();
-    _stateController.add(_filtered);
+    _stateController.add(Map());
   }
 
   CollectionStream<T> get readable => CollectionStream._(this);
 
-  Observable<Map<String, T>> get state => _stateController.stream;
+  Observable<Map<String, T>> get state => _filter == null
+      ? _stateController.stream
+      : _stateController.stream
+        .map((state) => state..removeWhere((key, value) => !_filter(key, value)));
 
   Stream<MapEntry<String, T>> get addition => _additionController.stream;
 
   Stream<MapEntry<String, T>> get modification => _modificationController.stream;
 
-  Stream<String> get removal => _removalController.stream;
+  Stream<String> get removal =>  _removalController.stream;
 
-  Map<String, T> currentState() => _filtered;
+  Map<String, T> currentState() =>
+      Map.from(_state)..removeWhere((key, value) => !_filter(key, value));
 
   void insert(MapEntry<String, T> entry) {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
     bool contained = _state.containsKey(entry.key);
     _state.addEntries([entry]);
+    _inserted.addEntries([entry]);
+    _stateController.add(_state);
     if (_filter != null) {
       if (_filter(entry.key, entry.value)) {
-        _filtered.addEntries([entry]);
-        _stateController.add(_filtered);
         if (contained) _modificationController.add(entry);
         else _additionController.add(entry);
       }
     } else {
-      _filtered.addEntries([entry]);
-      _stateController.add(_filtered);
       if (contained) _modificationController.add(entry);
       else _additionController.add(entry);
     }
@@ -83,15 +85,17 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T>{
   void remove(String key) {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
-    if (_state.containsKey(key)
-        && (!_sources.containsKey(key)
+    _inserted.remove(key);
+    if (_state.containsKey(key) &&
+        (!_sources.containsKey(key)
             || (_sources[key]?.isEmpty ?? true))) {
+      T value = _state[key];
       _state.remove(key);
-      if (_filtered.containsKey(key)) {
-        _filtered.remove(key);
-        _stateController.add(_filtered);
-        _removalController.add(key);
-      }
+      _stateController.add(_state);
+      if (_filter != null) {
+        if (_filter(key, value))
+          _removalController.add(key);
+      } else _removalController.add(key);
     }
   }
 
@@ -99,32 +103,23 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T>{
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
     _filter = filter;
+    _stateController.add(_state);
     for (MapEntry<String, T> entry in _state.entries) {
-      if (filter(entry.key, entry.value)) {
-        if (!_filtered.containsKey(entry.key)) {
-          _filtered.addEntries([entry]);
-          _stateController.add(_filtered);
-          _additionController.add(entry);
-        }
-      } else {
-        if (_filtered.containsKey(entry.key)) {
-          _filtered.remove(entry.key);
-          _stateController.add(_filtered);
+      if (!filter(entry.key, entry.value))
           _removalController.add(entry.key);
-        }
-      }
     }
   }
 
   void deleteFilter() {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
+    bool Function(String, T) filter = _filter;
     _filter = null;
-    for (MapEntry<String, T> entry in _state.entries) {
-      if (!_filtered.containsKey(entry.key)) {
-        _filtered.addEntries([entry]);
-        _stateController.add(_filtered);
-        _additionController.add(entry);
+    _stateController.add(_state);
+    if (filter != null) {
+      for (MapEntry<String, T> entry in _state.entries) {
+        if (!filter(entry.key, entry.value))
+          _additionController.add(entry);
       }
     }
   }
@@ -132,43 +127,39 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T>{
   @override
   void _addElement(String source, FireblendStreamElement<T> element) {
     _subscribe(source, element.added.listen((MapEntry<String, T> entry) {
-      if (_sources[entry.key] == null)
-        _sources[entry.key] = Set();
+      if (_sources[entry.key] == null) _sources[entry.key] = Set();
       _sources[entry.key].add(source);
       if (!_state.containsKey(entry.key)) {
         _state.addEntries([entry]);
+        _stateController.add(_state);
         if (_filter != null) {
-          if (_filter(entry.key, entry.value)) {
-            _filtered.addEntries([entry]);
-            _stateController.add(_filtered);
+          if (_filter(entry.key, entry.value))
             _additionController.add(entry);
-          }
-        } else {
-          _filtered.addEntries([entry]);
-          _stateController.add(_filtered);
-          _additionController.add(entry);
-        }
+        } else _additionController.add(entry);
       }
     }));
     _subscribe(source, element.modified.listen((MapEntry<String, T> entry) {
+      if (_inserted.containsKey(entry.key)) return;
       if (_state.containsKey(entry.key)) {
         _state.addEntries([entry]);
-        if (_filtered.containsKey(entry.key)) {
-          _filtered.addEntries([entry]);
-          _stateController.add(_filtered);
-          _modificationController.add(entry);
-        }
+        _stateController.add(_state);
+        if (_filter != null) {
+          if (_filter(entry.key, entry.value))
+            _modificationController.add(entry);
+        } else _modificationController.add(entry);
       }
     }));
     _subscribe(source, element.removed.listen((String key) {
       if (_sources[key] != null) _sources[key].remove(source);
       if (_sources[key]?.isNotEmpty ?? false) return;
-      if (_state.containsKey(key)) {
+      if (_state.containsKey(key) && !_inserted.containsKey(key)) {
+        T value = _state[key];
         _state.remove(key);
-        if (_filtered.containsKey(key)) {
-          _filtered.remove(key);
-          _stateController.add(_filtered);
-          _removalController.add(key);        }
+        _stateController.add(_state);
+        if (_filter != null) {
+          if (_filter(key, value))
+            _removalController.add(key);
+        } else _removalController.add(key);
       }
     }));
   }
@@ -179,11 +170,14 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T>{
     for (String key in state.keys) {
       if (_sources[key] != null) _sources[key].remove(source);
       if (_sources[key]?.isNotEmpty ?? false) continue;
-      _state.remove(key);
-      if (_filtered.containsKey(key)) {
-        _filtered.remove(key);
-        _stateController.add(_filtered);
-        _removalController.add(key);
+      if (!_inserted.containsKey(key)) {
+        T value = _state[key];
+        _state.remove(key);
+        _stateController.add(_state);
+        if (_filter != null) {
+          if (_filter(key, value))
+            _removalController.add(key);
+        } else _removalController.add(key);
       }
     }
   }
@@ -191,19 +185,28 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T>{
   @override
   Future _clear() async {
     Map<String, Set<String>> sources = Map.from(_sources);
-    Map<String, T> filtered = Map.from(_filtered);
-    _state.removeWhere((key, value) => sources[key]?.isNotEmpty ?? false);
-    _filtered.removeWhere((key, value) => sources[key]?.isNotEmpty ?? false);
-    _stateController.add(_filtered);
+    Map<String, T> state = Map.from(_state);
+    _state.removeWhere((key, value) => !_inserted.containsKey(key));
+    _stateController.add(_state);
     _sources.clear();
-    for (String key in sources.keys)
+    for (String key in sources.keys) {
       if ((sources[key]?.isNotEmpty ?? false)
-          && filtered.containsKey(key))
-        _removalController.add(key);
+          && state.containsKey(key) && !_inserted.containsKey(key)) {
+        if (_filter != null) {
+          if (_filter(key, state[key]))
+            _removalController.add(key);
+        } else _removalController.add(key);
+      }
+    }
   }
 
   @override
   Future _close() async {
+    _stateController.add(Map());
+    for (String key in _state.keys)
+      _removalController.add(key);
+    _state.clear();
+    _inserted.clear();
     List<Future> futures = List();
     futures.add(_stateController.close());
     futures.add(_additionController.close());
@@ -213,7 +216,7 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T>{
   }
 }
 
-class ValueStreamProvider<T> extends FireblendStreamProvider<T>{
+class ValueStreamProvider<T> extends FireblendStreamProvider<T> {
   MapEntry<String, T> _state;
   Set<String> _sources;
 
@@ -245,8 +248,9 @@ class ValueStreamProvider<T> extends FireblendStreamProvider<T>{
     for (int i = 0; i < results.length; i++)
       accumulator = _combine(accumulator, results[i]);
     accumulator = _combine(accumulator, _state);
-    if (accumulator.isNotEmpty) return accumulator.entries
-        .firstWhere((entry) => entry.value != null, orElse: () => null);
+    if (accumulator.isNotEmpty)
+      return accumulator.entries
+          .firstWhere((entry) => entry.value != null, orElse: () => null);
     else return null;
   }
 
@@ -255,15 +259,15 @@ class ValueStreamProvider<T> extends FireblendStreamProvider<T>{
     _subscribe(source, element.state.listen((dynamic state) {
       if (state == null || (state is Map && state.isEmpty)) {
         _sources.remove(source);
-        if (_sources.isEmpty)
-          _state = null;
+        if (_sources.isEmpty) _state = null;
       } else if (state is Map) {
         _sources.add(source);
         _state = state.entries.first;
       } else if (state is MapEntry) {
         _sources.add(source);
         _state = state;
-      } _stateController.add(_state);
+      }
+      _stateController.add(_state);
     }));
   }
 
@@ -296,15 +300,13 @@ abstract class FireblendStreamProvider<T> {
   void readyListeners() {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
-    for (String key in _elements.keys)
-      _elements[key].readyListeners();
+    for (String key in _elements.keys) _elements[key].readyListeners();
   }
 
   void addElement(FireblendStreamElement<T> element, {String key}) {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
-    if (key == null)
-      key = Random().nextDouble().toString();
+    if (key == null) key = Random().nextDouble().toString();
     _elements[key] = element;
     _addElement(key, element);
   }
@@ -333,14 +335,13 @@ abstract class FireblendStreamProvider<T> {
   }
 
   Future _subscribe(String source, StreamSubscription subscription) async {
-    if (_closed){
+    if (_closed) {
       await subscription.cancel();
     } else {
       String key = Random().nextDouble().toString();
       await _subscriptions[key]?.cancel();
       _subscriptions[key] = subscription;
-      if (_mapping[source] == null)
-        _mapping[source] = Set();
+      if (_mapping[source] == null) _mapping[source] = Set();
       _mapping[source].add(key);
     }
   }
@@ -354,13 +355,13 @@ abstract class FireblendStreamProvider<T> {
       return Map<String, T>.from(left)..addEntries(right?.entries ?? Map());
     else if (left is Map && right is MapEntry)
       return Map<String, T>.from(left)..addEntries([right]);
-    else  if (left is MapEntry && right is Map)
+    else if (left is MapEntry && right is Map)
       return Map<String, T>.from(right)..addEntries([left]);
-    else  if (left is MapEntry && right == null)
+    else if (left is MapEntry && right == null)
       return Map<String, T>.fromEntries([left]);
     else if (left == null && right is MapEntry)
       return Map<String, T>.fromEntries([right]);
-    else  if (left is MapEntry && right is MapEntry)
+    else if (left is MapEntry && right is MapEntry)
       return Map<String, T>.fromEntries([left, right]);
     else return Map<String, T>();
   }
@@ -376,8 +377,7 @@ abstract class FireblendStreamProvider<T> {
     for (String key in _subscriptions.keys)
       futures.add(_subscriptions[key].cancel());
     _subscriptions.clear();
-    for (String key in _elements.keys)
-      futures.add(_elements[key].close());
+    for (String key in _elements.keys) futures.add(_elements[key].close());
     _elements.clear();
     _mapping.clear();
     await Future.wait(futures);
