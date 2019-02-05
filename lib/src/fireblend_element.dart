@@ -138,24 +138,24 @@ abstract class FireblendElement<T> {
           case _EventType.VALUE:
             _subscribe(query.onValue.listen((FireblendEvent event) {
               if (!_closed && event.snapshot.value != null)
-                converterAsync(_source(query.getPath(), event.snapshot.key), event.snapshot);
+                converterAsync(_id(query.getPath(), event.snapshot.key), event.snapshot);
               if (!_closed && event.snapshot.value == null)
-                _remover(_source(query.getPath(), event.snapshot.key));
-            }), _EventType.VALUE); break;
+                _remover(_id(query.getPath(), event.snapshot.key));
+            }), _id(query.getPath(), _EventType.VALUE)); break;
           case _EventType.CHILD_ADDED:
             _subscribe(query.onChildAdded.listen((FireblendEvent event) {
               if (!_closed && event.snapshot.value != null)
-                converterAsync(_source(query.getPath(), event.snapshot.key), event.snapshot);
-            }), _EventType.CHILD_ADDED); break;
+                converterAsync(_id(query.getPath(), event.snapshot.key), event.snapshot);
+            }), _id(query.getPath(), _EventType.CHILD_ADDED)); break;
           case _EventType.CHILD_CHANGED:
             _subscribe(query.onChildChanged.listen((FireblendEvent event) {
               if (!_closed && event.snapshot.value != null)
-                converterAsync(_source(query.getPath(), event.snapshot.key), event.snapshot);
-            }), _EventType.CHILD_CHANGED); break;
+                converterAsync(_id(query.getPath(), event.snapshot.key), event.snapshot);
+            }), _id(query.getPath(), _EventType.CHILD_CHANGED)); break;
           case _EventType.CHILD_REMOVED:
             _subscribe(query.onChildRemoved.listen((FireblendEvent event) {
-              if (!_closed) _remover(_source(query.getPath(), event.snapshot.key));
-            }), _EventType.CHILD_REMOVED); break;
+              if (!_closed) _remover(_id(query.getPath(), event.snapshot.key));
+            }), _id(query.getPath(), _EventType.CHILD_REMOVED)); break;
           default:
             throw Exception("Unsupported event type.");
         }
@@ -163,7 +163,7 @@ abstract class FireblendElement<T> {
     }
   }
 
-  String _source(String path, String key) => path + " (" + key + ")";
+  String _id(String path, String key) => path + " (" + key + ")";
 
   /// This method must only be called from within [converterAsync].
   /// It inserts a new [entry] into the [state].
@@ -190,13 +190,8 @@ abstract class FireblendElement<T> {
   /// parameter of the aforementioned [converterAsync].
   /// The [key] uniquely identifies the [subscription].
   void subscribe(String source, StreamSubscription subscription, {String key}) {
-    if (key == null) key = source;
-    if (key == _EventType.VALUE
-        || key == _EventType.CHILD_ADDED
-        || key == _EventType.CHILD_CHANGED
-        || key == _EventType.CHILD_REMOVED
-        || key == _EventType.CHILD_MOVED)
-      throw Exception("The associated key must not match any event type.");
+    if (key == null)
+      key = Random(42).nextDouble().toString();
     _subscribe(subscription, key);
     if (!_closed) {
       if (_mapping[source] == null)
