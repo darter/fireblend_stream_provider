@@ -51,8 +51,8 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
   CollectionStream<T> get readable => CollectionStream._(this);
 
   Observable<Map<String, T>> get state => _stateController.stream.map((state) {
-    if (_filter == null) return state;
-    else return state..removeWhere((key, value) => !_filter(key, value));
+    if (_filter == null) return Map.from(state);
+    else return Map.from(state)..removeWhere((key, value) => !_filter(key, value));
   });
 
   Stream<MapEntry<String, T>> get addition => _additionController.stream;
@@ -245,9 +245,10 @@ class ValueStreamProvider<T> extends FireblendStreamProvider<T> {
 
   ValueStream<T> get readable => ValueStream._(this);
 
-  Observable<MapEntry<String, T>> get state => _stateController.stream;
+  Observable<MapEntry<String, T>> get state =>
+      _stateController.stream.map((entry) => MapEntry(entry.key, entry.value));
 
-  MapEntry<String, T> currentState() => _state;
+  MapEntry<String, T> currentState() => MapEntry(_state.key, _state.value);
 
   Future<MapEntry<String, T>> once() async {
     List<Future> futures = List();
