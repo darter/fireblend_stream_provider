@@ -105,23 +105,36 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
   void addFilter(bool Function(String, T) filter) {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
+    if (filter == null) return deleteFilter();
+    bool Function(String, T) oldFilter = _filter;
     _filter = filter;
     _stateController.add(_state);
-    for (MapEntry<String, T> entry in _state.entries) {
-      if (!filter(entry.key, entry.value))
+    if (oldFilter != null) {
+      for (MapEntry<String, T> entry in _state.entries) {
+        if (!oldFilter(entry.key, entry.value)
+            && _filter(entry.key, entry.value))
+          _additionController.add(entry);
+        else if (oldFilter(entry.key, entry.value)
+            && !_filter(entry.key, entry.value))
           _removalController.add(entry.key);
+      }
+    } else {
+      for (MapEntry<String, T> entry in _state.entries) {
+        if (!_filter(entry.key, entry.value))
+          _removalController.add(entry.key);
+      }
     }
   }
 
   void deleteFilter() {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
-    bool Function(String, T) filter = _filter;
+    bool Function(String, T) oldFilter = _filter;
     _filter = null;
     _stateController.add(_state);
-    if (filter != null) {
+    if (oldFilter != null) {
       for (MapEntry<String, T> entry in _state.entries) {
-        if (!filter(entry.key, entry.value))
+        if (!oldFilter(entry.key, entry.value))
           _additionController.add(entry);
       }
     }
