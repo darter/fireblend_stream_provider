@@ -246,9 +246,15 @@ class ValueStreamProvider<T> extends FireblendStreamProvider<T> {
   ValueStream<T> get readable => ValueStream._(this);
 
   Observable<MapEntry<String, T>> get state =>
-      _stateController.stream.map((entry) => MapEntry(entry.key, entry.value));
+      _stateController.stream.map((entry) {
+        if (entry == null) return null;
+        else return MapEntry(entry.key, entry.value);
+      });
 
-  MapEntry<String, T> currentState() => MapEntry(_state.key, _state.value);
+  MapEntry<String, T> currentState() {
+    if (_state == null) return null;
+    else return MapEntry(_state.key, _state.value);
+  }
 
   Future<MapEntry<String, T>> once() async {
     List<Future> futures = List();
