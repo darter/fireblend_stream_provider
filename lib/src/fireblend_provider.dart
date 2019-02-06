@@ -50,9 +50,10 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
 
   CollectionStream<T> get readable => CollectionStream._(this);
 
-  Observable<Map<String, T>> get state => _stateController.stream
-      .map((state) => _filter == null ? state
-      : state..removeWhere((key, value) => !_filter(key, value)));
+  Observable<Map<String, T>> get state => _stateController.stream.map((state) {
+    if (_filter == null) return state;
+    else return state..removeWhere((key, value) => !_filter(key, value));
+  });
 
   Stream<MapEntry<String, T>> get addition => _additionController.stream;
 
