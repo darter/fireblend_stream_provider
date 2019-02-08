@@ -200,6 +200,15 @@ abstract class FireblendElement<T> {
     }
   }
 
+  /// This method should only be called from within [converterAsync].
+  bool isSubscribed(String key) => _subscriptions.containsKey(key);
+
+  /// This method should only be called from within [converterAsync].
+  Future cancelSubscription(String key) async {
+    await _subscriptions[key]?.cancel();
+    _subscriptions.remove(key);
+  }
+
   void _subscribe(StreamSubscription subscription, String key) {
     if (_closed)
       subscription.cancel();
@@ -220,11 +229,13 @@ abstract class FireblendElement<T> {
         dynamic result = _subscriptions.remove(key);
         // Delete related entries.
         if (result == null) {
-          _sources[key].remove(source);
-          if (_sources[key].isEmpty) {
-            T value = _state[key];
-            _state.remove(key);
-            _onRemoved(MapEntry(key, value));
+          result = _sources[key]?.remove(source);
+          if (result ?? false) {
+            if (_sources[key].isEmpty) {
+              T value = _state[key];
+              _state.remove(key);
+              _onRemoved(MapEntry(key, value));
+            }
           }
         }
       } _mapping.remove(source);
