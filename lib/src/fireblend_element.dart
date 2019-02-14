@@ -251,6 +251,7 @@ abstract class FireblendElement<T> {
   /// Cancels all of the [StreamSubscription] inside of [_subscriptions]
   /// that were tied to class through the use of [subscribe].
   Future close() async {
+    _closed = true;
     List<Future> futures = List();
     for (String key in _subscriptions.keys)
       futures.add(_subscriptions[key].cancel());
