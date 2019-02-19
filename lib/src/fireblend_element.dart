@@ -173,14 +173,17 @@ abstract class FireblendElement<T> {
     if (_closed) return false;
     bool contained = _state.containsKey(entry.key);
     _state.addEntries([entry]);
+    if (contained) _onModified(entry);
+    else _onAdded(entry);
+    // Not adding a source is only justified when the entry is
+    // being updated from somewhere other than one of its sources.
+    if (source == null) return true;
     if (_mapping[source] == null)
       _mapping[source] = Set();
     _mapping[source].add(entry.key);
     if (_sources[entry.key] == null)
       _sources[entry.key] = Set();
     _sources[entry.key].add(source);
-    if (contained) _onModified(entry);
-    else _onAdded(entry);
     return true;
   }
 
@@ -190,6 +193,8 @@ abstract class FireblendElement<T> {
   /// parameter of the aforementioned [converterAsync].
   /// The [key] uniquely identifies the [subscription].
   void subscribe(String source, StreamSubscription subscription, {String key}) {
+    // Not providing a key means this subscription will effectively
+    // be in place as long as the source is present.
     if (key == null)
       key = Random(42).nextDouble().toString();
     _subscribe(subscription, key);
