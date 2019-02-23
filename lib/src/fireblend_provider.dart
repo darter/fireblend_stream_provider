@@ -155,7 +155,6 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
       }
     }));
     _subscribe(source, element.modified.listen((MapEntry<String, T> entry) {
-      if (_inserted.containsKey(entry.key)) return;
       if (_state.containsKey(entry.key)) {
         _state.addEntries([entry]);
         _stateController.add(_state);
