@@ -295,7 +295,10 @@ class ValueStreamProvider<T> extends FireblendStreamProvider<T> {
   void _deleteElement(String source) {}
 
   @override
-  Future _clear() async => _stateController.add(null);
+  Future _clear() async {
+    _state = null;
+    _stateController.add(_state);
+  }
 
   @override
   Future _close() async => await _stateController.close();
@@ -394,7 +397,8 @@ abstract class FireblendStreamProvider<T> {
     for (String key in _subscriptions.keys)
       futures.add(_subscriptions[key].cancel());
     _subscriptions.clear();
-    for (String key in _elements.keys) futures.add(_elements[key].close());
+    for (String key in _elements.keys)
+      futures.add(_elements[key].close());
     _elements.clear();
     _mapping.clear();
     await Future.wait(futures);
