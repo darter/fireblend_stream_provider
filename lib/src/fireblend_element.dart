@@ -188,6 +188,26 @@ abstract class FireblendElement<T> {
   }
 
   /// This method must only be called from within [converterAsync].
+  /// It removes an existing [entry] from the [state].
+  /// The [source] must be the one that came as the
+  /// parameter of the aforementioned [converterAsync].
+  bool extract(String source, MapEntry<String, T> entry) {
+    if (_closed) return false;
+    bool contained = _state.containsKey(entry.key);
+    _state.remove(entry.key);
+    if (contained) _onRemoved(entry);
+    else return false;
+    // Not adding a source is only justified when the entry is
+    // being updated from somewhere other than one of its sources.
+    if (source == null) return true;
+    if (_mapping[source] != null)
+      _mapping[source].remove(entry.key);
+    if (_sources[entry.key] != null)
+      _sources[entry.key].remove(source);
+    return true;
+  }
+
+  /// This method must only be called from within [converterAsync].
   /// It ties the [subscription] to the lifecycle of this class.
   /// The [source] must be the one that came as the
   /// parameter of the aforementioned [converterAsync].
