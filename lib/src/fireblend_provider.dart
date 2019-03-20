@@ -181,7 +181,7 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
 
   @override
   void _deleteElement(String source) {
-    Map<String, T> state = _elements[source].currentState();
+    Map<String, T> state = _elements[source]?.currentState() ?? Map();
     for (String key in state.keys) {
       if (_sources[key] != null) _sources[key].remove(source);
       if (_sources[key]?.isNotEmpty ?? false) continue;
@@ -327,6 +327,7 @@ abstract class FireblendStreamProvider<T> {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
     if (key == null) key = Random().nextDouble().toString();
+    if (_elements[key] != null) deleteElement(key);
     _elements[key] = element;
     _addElement(key, element);
   }
@@ -337,8 +338,8 @@ abstract class FireblendStreamProvider<T> {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
     _deleteElement(key);
-    _elements[key].close();
-    _elements.remove(key);
+    _elements[key]?.close();
+    _elements?.remove(key);
     _cancel(key);
   }
 
