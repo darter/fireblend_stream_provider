@@ -115,10 +115,6 @@ abstract class FireblendElement<T> {
   Map<String, StreamSubscription> _subscriptions;
 
   FireblendElement(this._queries, this._eventTypes) {
-    if (_queries?.isEmpty ?? true)
-      throw Exception("At least one FireblendQuery must be provided.");
-    if (_eventTypes?.isEmpty ?? true)
-      throw Exception("At least one _EventType must be provided.");
     _state = Map();
     _closed = false;
     _ready = false;
