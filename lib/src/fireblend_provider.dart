@@ -94,20 +94,22 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
     T removed = _inserted.remove(key);
 
     if (_filter != null) {
-      if (!_filterInserted
-          || _filter(key, removed)) {
+      if (removed != null  && (!_filterInserted || _filter(key, removed))) {
         if (!_sources.containsKey(key)
-            || (_sources[key]?.isEmpty ?? true)) {
+            || (_sources[key]?.isEmpty ?? true)
+            || !_filter(key, removed)) {
           _state.remove(key);
           _stateController.add(_state);
           _removalController.add(key);
         }
       }
-    } else if (!_sources.containsKey(key)
-        || (_sources[key]?.isEmpty ?? true)) {
-      _state.remove(key);
-      _stateController.add(_state);
-      _removalController.add(key);
+    } else if (removed != null){
+      if (!_sources.containsKey(key)
+          || (_sources[key]?.isEmpty ?? true)) {
+        _state.remove(key);
+        _stateController.add(_state);
+        _removalController.add(key);
+      }
     }
   }
 
