@@ -36,8 +36,9 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
   StreamController<MapEntry<String, T>> _additionController;
   StreamController<MapEntry<String, T>> _modificationController;
   StreamController<String> _removalController;
+  bool _filterInserted;
 
-  CollectionStreamProvider() {
+  CollectionStreamProvider({bool filterInserted = true}) {
     _state = Map();
     _inserted = Map();
     _sources = Map();
@@ -46,13 +47,15 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
     _modificationController = StreamController<MapEntry<String, T>>.broadcast();
     _removalController = StreamController<String>.broadcast();
     _stateController.add(Map());
+    _filterInserted = filterInserted;
   }
 
   CollectionStream<T> get readable => CollectionStream._(this);
 
   Observable<Map<String, T>> get state => _stateController.stream.map((state) {
     if (_filter == null) return Map.from(state);
-    else return Map.from(state)..removeWhere((key, value) => !_filter(key, value));
+    else return Map.from(state)..removeWhere((key, value) => !_filter(key, value)
+        && (_filterInserted || (!_filterInserted && !_inserted.containsKey(key))));
   });
 
   Stream<MapEntry<String, T>> get addition => _additionController.stream;
