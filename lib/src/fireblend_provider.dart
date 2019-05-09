@@ -77,7 +77,7 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
     _state.addEntries([entry]);
     _inserted.addEntries([entry]);
     _stateController.add(_state);
-    if (_filter != null) {
+    if (_filter != null && _filterInserted) {
       if (_filter(entry.key, entry.value)) {
         if (contained) _modificationController.add(entry);
         else _additionController.add(entry);
@@ -99,7 +99,9 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
       _state.remove(key);
       _stateController.add(_state);
       if (_filter != null) {
-        if (_filter(key, value))
+        if (_filter(key, value)
+            && (_filterInserted || (!_filterInserted
+            && !_inserted.containsKey(key))))
           _removalController.add(key);
       } else _removalController.add(key);
     }
@@ -114,17 +116,23 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
     _stateController.add(_state);
     if (oldFilter != null) {
       for (MapEntry<String, T> entry in _state.entries) {
-        if (!oldFilter(entry.key, entry.value)
-            && _filter(entry.key, entry.value))
-          _additionController.add(entry);
-        else if (oldFilter(entry.key, entry.value)
-            && !_filter(entry.key, entry.value))
-          _removalController.add(entry.key);
+        if ((_filterInserted || (!_filterInserted
+            && !_inserted.containsKey(entry.key)))) {
+          if (!oldFilter(entry.key, entry.value)
+              && _filter(entry.key, entry.value))
+            _additionController.add(entry);
+          else if (oldFilter(entry.key, entry.value)
+              && !_filter(entry.key, entry.value))
+            _removalController.add(entry.key);
+        }
       }
     } else {
       for (MapEntry<String, T> entry in _state.entries) {
-        if (!_filter(entry.key, entry.value))
-          _removalController.add(entry.key);
+        if ((_filterInserted || (!_filterInserted
+            && !_inserted.containsKey(entry.key)))) {
+          if (!_filter(entry.key, entry.value))
+            _removalController.add(entry.key);
+        }
       }
     }
   }
@@ -137,7 +145,7 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
     _stateController.add(_state);
     if (oldFilter != null) {
       for (MapEntry<String, T> entry in _state.entries) {
-        if (!oldFilter(entry.key, entry.value))
+        if (!oldFilter(entry.key, entry.value) && _filterInserted)
           _additionController.add(entry);
       }
     }
