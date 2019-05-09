@@ -91,17 +91,18 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
   void remove(String key) {
     if (_closed)
       throw Exception("The fireblend stream provider has already been closed.");
-    _inserted.remove(key);
-    if (_state.containsKey(key) &&
-        (!_sources.containsKey(key)
-            || (_sources[key]?.isEmpty ?? true))) {
-      T value = _state[key];
+    T removed = _inserted.remove(key);
+
+    if (_filter != null) {
+      if (!_filterInserted
+          || _filter(key, removed))
+        _removalController.add(key);
+    } else _removalController.add(key);
+
+    if (!_sources.containsKey(key)
+        || (_sources[key]?.isEmpty ?? true)) {
       _state.remove(key);
       _stateController.add(_state);
-      if (_filter != null) {
-        if ((_filter(key, value) && _filterInserted)
-            || !_filterInserted) _removalController.add(key);
-      } else _removalController.add(key);
     }
   }
 
