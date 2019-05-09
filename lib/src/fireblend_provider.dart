@@ -145,7 +145,9 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
     _stateController.add(_state);
     if (oldFilter != null) {
       for (MapEntry<String, T> entry in _state.entries) {
-        if (!oldFilter(entry.key, entry.value) && _filterInserted)
+        if (!oldFilter(entry.key, entry.value)
+            && (_filterInserted || (!_filterInserted
+            && !_inserted.containsKey(entry.key))))
           _additionController.add(entry);
       }
     }
