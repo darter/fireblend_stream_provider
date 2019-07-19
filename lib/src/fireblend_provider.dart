@@ -366,7 +366,6 @@ abstract class FireblendStreamProvider<T> {
     _deleteElement(key);
     _elements[key]?.close();
     _elements?.remove(key);
-    _subscriptions["$key-error"]?.cancel();
     _cancel(key);
   }
 
@@ -445,7 +444,7 @@ abstract class FireblendStreamProvider<T> {
 
   Future _close();
 
-  void catchError(Function(dynamic) function) {
+  void setErrorHandler(Function(dynamic) function) {
     _errorHandler = function;
     for (String key in _elements.keys) {
       FireblendStreamElement element = _elements[key];
