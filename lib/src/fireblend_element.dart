@@ -44,16 +44,18 @@ abstract class ValueStreamElement<T> extends FireblendStreamElement<T> {
       (_state?.entries?.isNotEmpty ?? false) ? _state.entries.first : null;
 
   Future<List> once() async {
-    List<Future> futures = List();
-    for (FireblendQuery query in _queries) {
-      await query.once().then((FireblendDataSnapshot snapshot) {
-        if (snapshot.value != null)
-          futures.add(converterSync(snapshot));
-      });
+    try {
+      List<Future> futures = List();
+      for (FireblendQuery query in _queries) {
+        await query.once().then((FireblendDataSnapshot snapshot) {
+          if (snapshot.value != null)
+            futures.add(converterSync(snapshot));
+        });
+      } return await Future.wait(futures);
+    } catch (e) {
+      _errorController.add(e);
+      return null;
     }
-
-    return await Future.wait(futures, eagerError: true)
-        .catchError((e) => _errorController.add(e));
   }
 }
 
@@ -139,51 +141,57 @@ abstract class FireblendElement<T> {
   void readyListeners() {
     if (_ready) return;
     _ready = true;
-    for (FireblendQuery query in _queries) {
-      for (String type in _eventTypes) {
-        switch (type) {
-          case _EventType.VALUE:
-            _subscribe(query.onValue.listen((FireblendEvent event) {
-              try {
-                if (!_closed && event.snapshot.value != null)
-                  converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
-                if (!_closed && event.snapshot.value == null)
-                  _remover(_id(query.hashCode, event.snapshot.key));
-              } catch (e) {
-                _onError(e);
-              }
-            }), _id(query.hashCode, _EventType.VALUE)); break;
-          case _EventType.CHILD_ADDED:
-            _subscribe(query.onChildAdded.listen((FireblendEvent event) {
-              try {
-                if (!_closed && event.snapshot.value != null)
-                  converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
-              } catch (e) {
-                _onError(e);
-              }
-            }), _id(query.hashCode, _EventType.CHILD_ADDED)); break;
-          case _EventType.CHILD_CHANGED:
-            _subscribe(query.onChildChanged.listen((FireblendEvent event) {
-              try {
-                if (!_closed && event.snapshot.value != null)
-                  converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
-              } catch (e) {
-                _onError(e);
-              }
-            }), _id(query.hashCode, _EventType.CHILD_CHANGED)); break;
-          case _EventType.CHILD_REMOVED:
-            _subscribe(query.onChildRemoved.listen((FireblendEvent event) {
-              try {
-                if (!_closed && event.snapshot.value != null)
-                  _remover(_id(query.hashCode, event.snapshot.key));
-              } catch (e) {
-                _onError(e);
-              }
-            }), _id(query.hashCode, _EventType.CHILD_REMOVED)); break;
-          default:
-            throw Exception("Unsupported event type.");
+
+    try {
+      for (FireblendQuery query in _queries) {
+        for (String type in _eventTypes) {
+          switch (type) {
+            case _EventType.VALUE:
+              _subscribe(query.onValue.listen((FireblendEvent event) {
+                try {
+                  if (!_closed && event.snapshot.value != null)
+                    converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
+                  if (!_closed && event.snapshot.value == null)
+                    _remover(_id(query.hashCode, event.snapshot.key));
+                } catch (e) {
+                  _onError(e);
+                }
+              }), _id(query.hashCode, _EventType.VALUE)); break;
+            case _EventType.CHILD_ADDED:
+              _subscribe(query.onChildAdded.listen((FireblendEvent event) {
+                try {
+                  if (!_closed && event.snapshot.value != null)
+                    converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
+                } catch (e) {
+                  _onError(e);
+                }
+              }), _id(query.hashCode, _EventType.CHILD_ADDED)); break;
+            case _EventType.CHILD_CHANGED:
+              _subscribe(query.onChildChanged.listen((FireblendEvent event) {
+                try {
+                  if (!_closed && event.snapshot.value != null)
+                    converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
+                } catch (e) {
+                  _onError(e);
+                }
+              }), _id(query.hashCode, _EventType.CHILD_CHANGED)); break;
+            case _EventType.CHILD_REMOVED:
+              _subscribe(query.onChildRemoved.listen((FireblendEvent event) {
+                try {
+                  if (!_closed && event.snapshot.value != null)
+                    _remover(_id(query.hashCode, event.snapshot.key));
+                } catch (e) {
+                  _onError(e);
+                }
+              }), _id(query.hashCode, _EventType.CHILD_REMOVED)); break;
+            default:
+              throw Exception("Unsupported event type.");
+          }
         }
       }
+    } catch (e) {
+      _onError(e);
+      _ready = false;
     }
   }
 
