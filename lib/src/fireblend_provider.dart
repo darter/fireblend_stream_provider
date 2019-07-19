@@ -304,8 +304,7 @@ class ValueStreamProvider<T> extends FireblendStreamProvider<T> {
       } else if (state is MapEntry) {
         _sources.add(source);
         _state = state;
-      }
-      _stateController.add(_state);
+      } _stateController.add(_state);
     }));
   }
 
@@ -326,6 +325,7 @@ abstract class FireblendStreamProvider<T> {
   Map<String, FireblendStreamElement<T>> _elements;
   Map<String, StreamSubscription> _subscriptions;
   Map<String, Set<String>> _mapping;
+  Function _errorHandler;
 
   bool _closed;
 
@@ -351,6 +351,11 @@ abstract class FireblendStreamProvider<T> {
     if (_elements[key] != null) deleteElement(key);
     _elements[key] = element;
     _addElement(key, element);
+
+    if (_errorHandler != null) {
+      _subscriptions["$key-error"]?.cancel();
+      _subscriptions["$key-error"] = element.errored.listen((error) => _errorHandler(error));
+    }
   }
 
   void _addElement(String source, FireblendStreamElement<T> component);
@@ -361,6 +366,7 @@ abstract class FireblendStreamProvider<T> {
     _deleteElement(key);
     _elements[key]?.close();
     _elements?.remove(key);
+    _subscriptions["$key-error"]?.cancel();
     _cancel(key);
   }
 
@@ -438,4 +444,13 @@ abstract class FireblendStreamProvider<T> {
   }
 
   Future _close();
+
+  void catchError(Function(dynamic) function) {
+    _errorHandler = function;
+    for (String key in _elements.keys) {
+      FireblendStreamElement element = _elements[key];
+      _subscriptions["$key-error"]?.cancel();
+      _subscriptions["$key-error"] =  element.errored.listen((error) => _errorHandler(error));
+    }
+  }
 }

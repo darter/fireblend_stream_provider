@@ -50,7 +50,10 @@ abstract class ValueStreamElement<T> extends FireblendStreamElement<T> {
         if (snapshot.value != null)
           futures.add(converterSync(snapshot));
       });
-    } return await Future.wait(futures);
+    }
+
+    return await Future.wait(futures, eagerError: true)
+        .catchError((e) => _errorController.add(e));
   }
 }
 
@@ -59,6 +62,7 @@ abstract class FireblendStreamElement<T> extends FireblendElement<T> {
   StreamController<MapEntry<String, T>> _addController = StreamController.broadcast();
   StreamController<MapEntry<String, T>> _modifyController = StreamController.broadcast();
   StreamController<String> _removeController = StreamController.broadcast();
+  StreamController<dynamic> _errorController = StreamController.broadcast();
 
   FireblendStreamElement(List<FireblendQuery> queries, List<String> eventTypes)
       : super(queries, eventTypes) {
@@ -72,6 +76,8 @@ abstract class FireblendStreamElement<T> extends FireblendElement<T> {
   Stream<MapEntry<String, T>> get modified => _modifyController.stream;
 
   Stream<String> get removed => _removeController.stream;
+
+  Stream<dynamic> get errored => _errorController.stream;
 
   @override
   void _onAdded(MapEntry<String, T> entry) {
@@ -92,6 +98,10 @@ abstract class FireblendStreamElement<T> extends FireblendElement<T> {
   }
 
   @override
+  void _onError(dynamic error) =>
+      _errorController.add(error);
+
+  @override
   Future close() async {
     await super.close();
     List<Future> futures = List();
@@ -99,6 +109,7 @@ abstract class FireblendStreamElement<T> extends FireblendElement<T> {
     futures.add(_addController.close());
     futures.add(_modifyController.close());
     futures.add(_removeController.close());
+    futures.add(_errorController.close());
     await Future.wait(futures);
   }
 }
@@ -133,24 +144,41 @@ abstract class FireblendElement<T> {
         switch (type) {
           case _EventType.VALUE:
             _subscribe(query.onValue.listen((FireblendEvent event) {
-              if (!_closed && event.snapshot.value != null)
-                converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
-              if (!_closed && event.snapshot.value == null)
-                _remover(_id(query.hashCode, event.snapshot.key));
+              try {
+                if (!_closed && event.snapshot.value != null)
+                  converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
+                if (!_closed && event.snapshot.value == null)
+                  _remover(_id(query.hashCode, event.snapshot.key));
+              } catch (e) {
+                _onError(e);
+              }
             }), _id(query.hashCode, _EventType.VALUE)); break;
           case _EventType.CHILD_ADDED:
             _subscribe(query.onChildAdded.listen((FireblendEvent event) {
-              if (!_closed && event.snapshot.value != null)
-                converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
+              try {
+                if (!_closed && event.snapshot.value != null)
+                  converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
+              } catch (e) {
+                _onError(e);
+              }
             }), _id(query.hashCode, _EventType.CHILD_ADDED)); break;
           case _EventType.CHILD_CHANGED:
             _subscribe(query.onChildChanged.listen((FireblendEvent event) {
-              if (!_closed && event.snapshot.value != null)
-                converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
+              try {
+                if (!_closed && event.snapshot.value != null)
+                  converterAsync(_id(query.hashCode, event.snapshot.key), event.snapshot);
+              } catch (e) {
+                _onError(e);
+              }
             }), _id(query.hashCode, _EventType.CHILD_CHANGED)); break;
           case _EventType.CHILD_REMOVED:
             _subscribe(query.onChildRemoved.listen((FireblendEvent event) {
-              if (!_closed) _remover(_id(query.hashCode, event.snapshot.key));
+              try {
+                if (!_closed && event.snapshot.value != null)
+                  _remover(_id(query.hashCode, event.snapshot.key));
+              } catch (e) {
+                _onError(e);
+              }
             }), _id(query.hashCode, _EventType.CHILD_REMOVED)); break;
           default:
             throw Exception("Unsupported event type.");
@@ -268,6 +296,8 @@ abstract class FireblendElement<T> {
   void _onModified(MapEntry<String, T> entry);
 
   void _onRemoved(MapEntry<String, T> entry);
+
+  void _onError(dynamic error);
 
   /// Cancels all of the [StreamSubscription] inside of [_subscriptions]
   /// that were tied to class through the use of [subscribe].
