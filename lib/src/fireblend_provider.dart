@@ -366,6 +366,9 @@ abstract class FireblendStreamProvider<T> {
 
   void _deleteElement(String source);
 
+  bool containsElement(String key) =>
+      _elements.containsKey(key);
+
   Future _cancel(String source) async {
     if (_mapping.containsKey(source)) {
       List<Future> futures = List();
