@@ -279,4 +279,12 @@ abstract class FireblendElement<T> {
     _subscriptions.clear();
     await Future.wait(futures);
   }
+
+  Future clear() async {
+    _mapping.clear();
+    _sources.clear();
+    for (String key in _state.keys) {
+      _onRemoved(MapEntry(key, _state[key]));
+    } _state.clear();
+  }
 }
