@@ -24,10 +24,11 @@ abstract class ChildStreamElement<T> extends FireblendStreamElement<T> {
         ]);
 
   @override
-  get state => _stateController.stream;
+  Stream<Map<String, T>> get state =>
+      _stateController.stream as Stream<Map<String, T>>;
 
   @override
-  Map<String, T> currentState() => _state;
+  Map<String, T>? currentState() => _state;
 }
 
 abstract class ValueStreamElement<T> extends FireblendStreamElement<T> {
@@ -37,12 +38,13 @@ abstract class ValueStreamElement<T> extends FireblendStreamElement<T> {
   Future<MapEntry<String, T>?> converterSync(FireblendDataSnapshot snapshot);
 
   @override
-  get state => _stateController.stream.map((state) =>
-      (state?.entries?.isNotEmpty ?? false) ? state.entries.first : null);
+  Stream<MapEntry<String, T>> get state =>
+      _stateController.stream.map((state) =>
+          (state?.entries?.isNotEmpty ?? false) ? state.entries.first : null);
 
   @override
   MapEntry<String, T>? currentState() =>
-      (_state.entries.isNotEmpty) ? _state.entries.first : null;
+      (_state?.entries.isNotEmpty ?? false) ? _state?.entries.first : null;
 
   Future<List?> once() async {
     List<Future> futures = [];
@@ -70,11 +72,11 @@ abstract class FireblendStreamElement<T> extends FireblendElement<T> {
 
   Stream<dynamic> get state;
 
-  get added => _addController.stream;
+  Stream<MapEntry<String, T>> get added => _addController.stream;
 
-  get modified => _modifyController.stream;
+  Stream<MapEntry<String, T>> get modified => _modifyController.stream;
 
-  get removed => _removeController.stream;
+  Stream<String> get removed => _removeController.stream;
 
   @override
   void _onAdded(MapEntry<String, T> entry) {
@@ -89,7 +91,7 @@ abstract class FireblendStreamElement<T> extends FireblendElement<T> {
   }
 
   @override
-  void _onRemoved(MapEntry<String, T> entry) {
+  void _onRemoved(MapEntry<String, T?> entry) {
     _stateController.add(_state);
     _removeController.add(entry.key);
   }
@@ -109,13 +111,13 @@ abstract class FireblendStreamElement<T> extends FireblendElement<T> {
 abstract class FireblendElement<T> {
   final List<FireblendQuery> _queries;
   final List<String> _eventTypes;
-  late Map<String, T> _state;
+  late Map<String, T>? _state;
   late bool _closed;
   late bool _ready;
 
   late Map<String, Set<String>> _mapping;
   late Map<String, Set<String>> _sources;
-  late Map<String, dynamic> _subscriptions;
+  late Map<String, StreamSubscription> _subscriptions;
 
   FireblendElement(this._queries, this._eventTypes) {
     _state = Map();
@@ -135,7 +137,7 @@ abstract class FireblendElement<T> {
       for (String type in _eventTypes) {
         switch (type) {
           case _EventType.VALUE:
-            _subscribe(query.onValue.listen((FireblendEvent? event) {
+            _subscribe(query.onValue?.listen((FireblendEvent? event) {
               if (!_closed && event?.snapshot?.value != null)
                 converterAsync(_id(query.hashCode, event?.snapshot?.key ?? ''),
                     event?.snapshot);
@@ -144,21 +146,21 @@ abstract class FireblendElement<T> {
             }), _id(query.hashCode, _EventType.VALUE));
             break;
           case _EventType.CHILD_ADDED:
-            _subscribe(query.onChildAdded.listen((FireblendEvent? event) {
+            _subscribe(query.onChildAdded?.listen((FireblendEvent? event) {
               if (!_closed && event?.snapshot?.value != null)
                 converterAsync(_id(query.hashCode, event?.snapshot?.key ?? ''),
                     event?.snapshot);
             }), _id(query.hashCode, _EventType.CHILD_ADDED));
             break;
           case _EventType.CHILD_CHANGED:
-            _subscribe(query.onChildChanged.listen((FireblendEvent? event) {
+            _subscribe(query.onChildChanged?.listen((FireblendEvent? event) {
               if (!_closed && event?.snapshot?.value != null)
                 converterAsync(_id(query.hashCode, event?.snapshot?.key ?? ''),
                     event?.snapshot);
             }), _id(query.hashCode, _EventType.CHILD_CHANGED));
             break;
           case _EventType.CHILD_REMOVED:
-            _subscribe(query.onChildRemoved.listen((FireblendEvent? event) {
+            _subscribe(query.onChildRemoved?.listen((FireblendEvent? event) {
               if (!_closed)
                 _remover(_id(query.hashCode, event?.snapshot?.key ?? ''));
             }), _id(query.hashCode, _EventType.CHILD_REMOVED));
@@ -178,8 +180,8 @@ abstract class FireblendElement<T> {
   /// parameter of the aforementioned [converterAsync].
   bool insert(String? source, MapEntry<String, T> entry) {
     if (_closed) return false;
-    bool contained = _state.containsKey(entry.key);
-    _state.addEntries([entry]);
+    bool contained = _state?.containsKey(entry.key) ?? false;
+    _state?.addEntries([entry]);
     if (contained)
       _onModified(entry);
     else
@@ -200,12 +202,12 @@ abstract class FireblendElement<T> {
   /// parameter of the aforementioned [converterAsync].
   bool extract(String? source, MapEntry<String, T> entry) {
     if (_closed || source == null) return false;
-    if (!_state.containsKey(entry.key)) return false;
+    if (!(_state?.containsKey(entry.key) ?? false)) return false;
     if (_mapping[source] != null) _mapping[source]?.remove(entry.key);
     if (_sources[entry.key] != null) {
       if (_sources[entry.key]!.remove(source)) {
         if (_sources[entry.key]!.isEmpty) {
-          _state.remove(entry.key);
+          _state?.remove(entry.key);
           _onRemoved(entry);
           return true;
         }
@@ -219,14 +221,15 @@ abstract class FireblendElement<T> {
   /// The [source] must be the one that came as the
   /// parameter of the aforementioned [converterAsync].
   /// The [key] uniquely identifies the [subscription].
-  void subscribe(String source, dynamic subscription, {String? key}) {
+  void subscribe(String source, StreamSubscription subscription,
+      {String? key}) {
     // Not providing a key means this subscription will effectively
     // be in place as long as the source is present.
     if (key == null) key = Random(42).nextDouble().toString();
     _subscribe(subscription, key);
     if (!_closed) {
       if (_mapping[source] == null) _mapping[source] = Set();
-      _mapping[source]!.add(key);
+      _mapping[source]?.add(key);
     }
   }
 
@@ -239,12 +242,12 @@ abstract class FireblendElement<T> {
     _subscriptions.remove(key);
   }
 
-  void _subscribe(dynamic subscription, String key) {
+  void _subscribe(StreamSubscription? subscription, String key) {
     if (_closed)
-      subscription.cancel();
+      subscription?.cancel();
     else {
       _subscriptions[key]?.cancel();
-      _subscriptions[key] = subscription;
+      if (subscription != null) _subscriptions[key] = subscription;
     }
   }
 
@@ -261,9 +264,9 @@ abstract class FireblendElement<T> {
         if (result == null) {
           result = _sources[key]?.remove(source);
           if (result ?? false) {
-            if (_sources[key]!.isEmpty) {
-              T value = _state[key]!;
-              _state.remove(key);
+            if (_sources[key]?.isEmpty ?? false) {
+              T? value = _state?[key];
+              _state?.remove(key);
               _onRemoved(MapEntry(key, value));
             }
           }
@@ -277,7 +280,7 @@ abstract class FireblendElement<T> {
 
   void _onModified(MapEntry<String, T> entry);
 
-  void _onRemoved(MapEntry<String, T> entry);
+  void _onRemoved(MapEntry<String, T?> entry);
 
   /// Cancels all of the [StreamSubscription] inside of [_subscriptions]
   /// that were tied to class through the use of [subscribe].
@@ -285,7 +288,8 @@ abstract class FireblendElement<T> {
     _closed = true;
     List<Future> futures = [];
     for (String key in _subscriptions.keys)
-      futures.add(_subscriptions[key].cancel());
+      if (_subscriptions[key] != null)
+        futures.add(_subscriptions[key]!.cancel());
     _subscriptions.clear();
     await Future.wait(futures);
   }
@@ -293,9 +297,9 @@ abstract class FireblendElement<T> {
   Future clear() async {
     _mapping.clear();
     _sources.clear();
-    for (String key in _state.keys) {
-      _onRemoved(MapEntry(key, _state[key]!));
+    for (String key in _state?.keys ?? {}) {
+      _onRemoved(MapEntry(key, _state![key]!));
     }
-    _state.clear();
+    _state?.clear();
   }
 }
