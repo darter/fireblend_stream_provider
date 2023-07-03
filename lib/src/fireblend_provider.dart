@@ -32,7 +32,7 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
   late Map<String, T> _inserted;
   bool Function(String, T)? _filter;
   late Map<String, Set<String>> _sources;
-  late BehaviorSubject<Map<String, T>> _stateController;
+  late BehaviorSubject<Map<String, T>?> _stateController;
   late StreamController<MapEntry<String, T>> _additionController;
   late StreamController<MapEntry<String, T>> _modificationController;
   late StreamController<String> _removalController;
@@ -42,11 +42,11 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
     _state = Map();
     _inserted = Map();
     _sources = Map();
-    _stateController = BehaviorSubject<Map<String, T>>();
+    _stateController = BehaviorSubject<Map<String, T>?>();
     _additionController = StreamController<MapEntry<String, T>>.broadcast();
     _modificationController = StreamController<MapEntry<String, T>>.broadcast();
     _removalController = StreamController<String>.broadcast();
-    _stateController.add(Map());
+    _stateController.add(null);
     _filterInserted = filterInserted;
   }
 
@@ -54,9 +54,9 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
 
   Stream<Map<String, T>> get state => _stateController.stream.map((state) {
         if (_filter == null)
-          return Map.from(state);
+          return Map.from(state ?? Map());
         else
-          return Map.from(state)
+          return Map.from(state ?? Map())
             ..removeWhere((key, value) =>
                 !_filter!(key, value) &&
                 (_filterInserted ||
@@ -234,7 +234,7 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
     _sources.clear();
     for (String key in state.keys) {
       if (!_inserted.containsKey(key)) {
-        if (_filter != null && state[key] != null) {
+        if (_filter != null) {
           if (_filter!(key, state[key]!)) _removalController.add(key);
         } else
           _removalController.add(key);
@@ -327,7 +327,7 @@ class ValueStreamProvider<T> extends FireblendStreamProvider<T> {
   Future _clear() async {
     _state = null;
     _stateController.add(_state);
-    _stateController.close();
+    //_stateController.close();
   }
 
   @override

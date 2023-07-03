@@ -38,7 +38,7 @@ abstract class ValueStreamElement<T> extends FireblendStreamElement<T> {
   Future<MapEntry<String, T>?> converterSync(FireblendDataSnapshot snapshot);
 
   @override
-  Stream<MapEntry<String, T>> get state =>
+  Stream<MapEntry<String, T>?> get state =>
       _stateController.stream.map((state) =>
           (state?.entries?.isNotEmpty ?? false) ? state.entries.first : null);
 
