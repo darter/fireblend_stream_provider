@@ -39,14 +39,14 @@ class CollectionStreamProvider<T> extends FireblendStreamProvider<T> {
   late bool _filterInserted;
 
   CollectionStreamProvider({bool filterInserted = true}) {
-    _state = Map();
-    _inserted = Map();
-    _sources = Map();
+    _state = {};
+    _inserted = {};
+    _sources = {};
     _stateController = BehaviorSubject<Map<String, T>?>();
     _additionController = StreamController<MapEntry<String, T>>.broadcast();
     _modificationController = StreamController<MapEntry<String, T>>.broadcast();
     _removalController = StreamController<String>.broadcast();
-    _stateController.add(null);
+    _stateController.add({});
     _filterInserted = filterInserted;
   }
 
